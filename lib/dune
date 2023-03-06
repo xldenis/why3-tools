@@ -1,0 +1,2 @@
+(library
+ (name why3_tools))

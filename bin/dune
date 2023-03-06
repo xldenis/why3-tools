@@ -1,0 +1,8 @@
+(executable
+ (public_name why3_tools)
+ (name main)
+ (libraries why3_tools why3 cmdliner))
+
+(env
+  (dev
+    (flags (:standard -warn-error -A))))
