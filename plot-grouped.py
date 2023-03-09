@@ -4,6 +4,12 @@ import numpy as np
 from pathlib import Path
 import sys
 
+def summary_stats(df):
+    descr1 = pd.Series({ 'count': df.count(), 'mean': df.mean(), 'std': df.std(), 'min': df.min(), 'max': df.max() })
+    descr2 = pd.Series({ '25%': df.quantile(0.25), '50%': df.quantile(0.50),'75%': df.quantile(0.75),'95%': df.quantile(0.95),})
+
+    return (descr1, descr2)
+
 file = sys.argv[1]
 
 out_dir = Path(file).stem
@@ -29,13 +35,13 @@ for name, group in groups:
     mad = deviation.median()
 
     # scale_factor = 2.08
-    scale_factor = 30
+    scale_factor = 4
     mod_z = np.abs((group["Time"] - median) / (scale_factor * mad))
 
     # print(mod_z)
     filtered_df = group[mod_z < 3.5]
 
-    print(f'Excluded {group.size - filtered_df.size} points out of {group.size} points in group {name}')
+    # print(f'Excluded {group.size - filtered_df.size} points out of {group.size} points in group {name}')
 
     # print(f'Stats for {name}')
     # print(filtered_df["Time"].describe().round(2).to_string())
@@ -47,12 +53,14 @@ for name, group in groups:
     fig, ax = plt.subplots()
 
     ax.hist(filtered_df["Time"], bins=num_bins)
-    ax.set_title("Histogram for " + name)
+    ax.set_title("Histogram for " + name + " excluding outliers")
     ax.set_xlabel("Time")
     ax.set_ylabel("Count")
 
-    ax.text(0.00,-0.2, filtered_df["Time"].describe().round(2).to_string(), fontsize=10, va="top", ha="left", transform=ax.transAxes)
-    ax.text(0.3, -0.2, f'95%       {filtered_df["Time"].quantile(0.95)}', fontsize=10, va="top", ha="left", transform=ax.transAxes)
+    descr1, descr2 = summary_stats(group["Time"])
+
+    ax.text(0.00,-0.25, "Untruncated statistics\n" + descr1.round(2).to_string(), fontsize=10, va="top", ha="left", transform=ax.transAxes)
+    ax.text(0.3, -0.25, "\n"+descr2.round(2).to_string(), fontsize=10, va="top", ha="left", transform=ax.transAxes)
 
     fig.subplots_adjust(bottom=0.4)
     fig.savefig(f'{out_dir}-grouped/{name}.png')
