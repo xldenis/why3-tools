@@ -4,5 +4,6 @@
  (libraries why3_tools why3 cmdliner))
 
 (env
-  (dev
-    (flags (:standard -warn-error -A))))
+ (dev
+  (flags
+   (:standard -warn-error -A))))

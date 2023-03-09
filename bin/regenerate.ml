@@ -4,19 +4,6 @@ open Cmdliner
 module S = Unix_scheduler.Unix_scheduler
 module C = Controller_itp.Make (Unix_scheduler.Unix_scheduler)
 
-(* TODO:
-
-   Custom strategy interpreter that has a finalize callback.
-
-   idea: a stack of cell memories
-   each transformation adds a new cell to the stack with value n for n sub-tasks
-   when we have 0 on the stack we can pop
-   when stack is empty and we halt call finalize
-   when we halt decrement count on top of stack
-
-   key: use a list for the stack so we get sharing, allows the memory to be implicitly tree-shaped
-*)
-
 let fmt_strat_step fmt s =
   let open Strategy in
   match s with
