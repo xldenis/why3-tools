@@ -14,7 +14,6 @@ depends: [
   "base-bigarray" {= "base"}
   "base-threads" {= "base"}
   "base-unix" {= "base"}
-  "cmdliner" {= "1.1.1"}
   "dune" {= "3.7.0"}
   "ocaml" {= "4.14.0"}
   "ocaml-base-compiler" {= "4.14.0"}

@@ -113,6 +113,7 @@ let regenerate why3_opts path strategy =
 
   let cont = Controller_itp.create_controller config env ses in
   Server_utils.load_strategies cont;
+  Controller_itp.set_session_max_tasks (Whyconf.running_provers_max (Whyconf.get_main config));
 
   let found_obs, _ =
     try Controller_itp.reload_files cont
@@ -122,8 +123,7 @@ let regenerate why3_opts path strategy =
   in
   if found_obs then Format.eprintf "Found obsolete goals..\n";
 
-  C.reset_proofs cont ~removed:(fun _ -> ()) ~notification:(fun _ -> ()) None;
-
+  (* C.reset_proofs cont ~removed:(fun _ -> ()) ~notification:(fun _ -> ()) None; *)
   let _, _, _, strat =
     try Hstr.find cont.controller_strategies strategy
     with Not_found ->
@@ -133,9 +133,29 @@ let regenerate why3_opts path strategy =
 
   let root_tasks =
     Session_itp.fold_all_session cont.controller_session
-      (fun acc any -> match any with APn id -> id :: acc | _ -> acc)
+      (fun acc any ->
+        match any with
+        | APn id -> begin
+            if not (Session_itp.pn_proved cont.controller_session id) then
+              match Session_itp.get_proof_parent cont.controller_session id with
+              | Theory _ -> begin
+                  Session_itp.remove_subtree
+                    ~notification:(fun _ -> ())
+                    ~removed:(fun _ -> ())
+                    cont.controller_session any;
+                  id :: acc
+                end
+              | _ -> acc
+            else acc
+          end
+        | _ -> acc)
       []
   in
+
+  if List.length root_tasks = 0 then begin
+    Format.printf "No obsolete tasks, exiting";
+    exit 0
+  end;
 
   Format.printf "Found %d root tasks, applying %s to each\n" (List.length root_tasks) strategy;
   Format.print_flush ();
@@ -156,7 +176,7 @@ let regenerate why3_opts path strategy =
     root_tasks;
 
   let update_monitor w s r =
-    Format.printf "Progress: %d/%d/%d\r%!" w s r;
+    Format.printf "Progress: %d/%d/%d      \r%!" w s r;
     Format.print_flush ()
   in
   C.register_observer update_monitor;
