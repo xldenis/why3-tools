@@ -121,9 +121,15 @@ let regenerate why3_opts path strategy =
       List.iter (fun e -> Format.printf "%a@." Exn_printer.exn_printer e) l;
       exit 1
   in
-  if found_obs then Format.eprintf "Found obsolete goals..\n";
+  if found_obs then begin
+    Format.eprintf "Found obsolete goals..\n";
+    C.replay ~valid_only:true ~obsolete_only:true cont
+          ~callback:(fun _ _ -> ())
+          ~notification:(fun _ -> ())
+          ~final_callback:(fun _ _ -> ())
+          ~any:None;
+  end;
 
-  (* C.reset_proofs cont ~removed:(fun _ -> ()) ~notification:(fun _ -> ()) None; *)
   let _, _, _, strat =
     try Hstr.find cont.controller_strategies strategy
     with Not_found ->
@@ -132,22 +138,16 @@ let regenerate why3_opts path strategy =
   in
 
   let root_tasks =
-    Session_itp.fold_all_session cont.controller_session
+    let open Session_itp in
+    let session = cont.controller_session in
+    let is_root id = match get_proof_parent session id with Theory _ -> true | _ -> false in
+    fold_all_session session
       (fun acc any ->
         match any with
-        | APn id -> begin
-            if not (Session_itp.pn_proved cont.controller_session id) then
-              match Session_itp.get_proof_parent cont.controller_session id with
-              | Theory _ -> begin
-                  Session_itp.remove_subtree
-                    ~notification:(fun _ -> ())
-                    ~removed:(fun _ -> ())
-                    cont.controller_session any;
-                  id :: acc
-                end
-              | _ -> acc
-            else acc
-          end
+        | APn id when (is_root id) && not (pn_proved session id) -> begin
+          remove_subtree ~notification:(fun _ -> ()) ~removed:(fun _ -> ()) session any;
+          id :: acc
+        end
         | _ -> acc)
       []
   in
