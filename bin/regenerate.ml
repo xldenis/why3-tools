@@ -95,6 +95,51 @@ let finalize cont roots =
             (Session_itp.get_proof_name cont.controller_session un_id).id_string)
         unproved
 
+let regenerate_unproved cont strategy =
+  let _, _, _, strat =
+    Server_utils.load_strategies cont;
+    try Hstr.find cont.controller_strategies strategy
+    with Not_found ->
+      Format.eprintf "Could not find the strategy %s" strategy;
+      exit 1
+  in
+
+  let root_tasks =
+    let open Session_itp in
+    let session = cont.controller_session in
+    let is_root id = match get_proof_parent session id with Theory _ -> true | _ -> false in
+    fold_all_session session
+      (fun acc any ->
+        match any with
+        | APn id when (is_root id) && not (pn_proved session id) -> id :: acc
+        | _ -> acc)
+      []
+  in
+
+  if List.length root_tasks = 0 then begin
+    Format.printf "No unproved tasks, exiting";
+    exit 0
+  end;
+
+  Format.printf "Found %d root tasks, applying %s to each\n" (List.length root_tasks) strategy;
+  Format.print_flush ();
+
+  (* A reference which stores how many strategies we are launching *)
+  let num_strats = ref (List.length root_tasks) in
+
+  List.iter
+    (fun id ->
+      C.reset_proofs cont ~removed:(fun _ -> ()) ~notification:(fun _ -> ()) (Some (APn id));
+      run_strategy_on_goal cont id strat
+        ~finalize:(fun _ ->
+          num_strats := !num_strats - 1;
+          if !num_strats = 0 then begin
+            finalize cont root_tasks;
+            exit 0
+          end)
+        ~notification:(fun _ -> ()))
+    root_tasks
+
 let init_env_conf opts =
   let open Whyconf in
   let config = init_config None in
@@ -112,7 +157,6 @@ let regenerate why3_opts path strategy =
   let ses = Session_itp.load_session dir in
 
   let cont = Controller_itp.create_controller config env ses in
-  Server_utils.load_strategies cont;
   Controller_itp.set_session_max_tasks (Whyconf.running_provers_max (Whyconf.get_main config));
 
   let found_obs, _ =
@@ -122,58 +166,14 @@ let regenerate why3_opts path strategy =
       exit 1
   in
   if found_obs then begin
-    Format.eprintf "Found obsolete goals..\n";
+    Format.printf "Found obsolete goals, replaying..\n";
+    Format.print_flush ();
     C.replay ~valid_only:true ~obsolete_only:true cont
           ~callback:(fun _ _ -> ())
           ~notification:(fun _ -> ())
-          ~final_callback:(fun _ _ -> ())
+          ~final_callback:(fun _ _ -> regenerate_unproved cont strategy)
           ~any:None;
-  end;
-
-  let _, _, _, strat =
-    try Hstr.find cont.controller_strategies strategy
-    with Not_found ->
-      Format.eprintf "Could not find the strategy %s" strategy;
-      exit 1
-  in
-
-  let root_tasks =
-    let open Session_itp in
-    let session = cont.controller_session in
-    let is_root id = match get_proof_parent session id with Theory _ -> true | _ -> false in
-    fold_all_session session
-      (fun acc any ->
-        match any with
-        | APn id when (is_root id) && not (pn_proved session id) -> begin
-          remove_subtree ~notification:(fun _ -> ()) ~removed:(fun _ -> ()) session any;
-          id :: acc
-        end
-        | _ -> acc)
-      []
-  in
-
-  if List.length root_tasks = 0 then begin
-    Format.printf "No obsolete tasks, exiting";
-    exit 0
-  end;
-
-  Format.printf "Found %d root tasks, applying %s to each\n" (List.length root_tasks) strategy;
-  Format.print_flush ();
-
-  (* A reference which stores how many strategies we are launching *)
-  let num_strats = ref (List.length root_tasks) in
-
-  List.iter
-    (fun id ->
-      run_strategy_on_goal cont id strat
-        ~finalize:(fun _ ->
-          num_strats := !num_strats - 1;
-          if !num_strats = 0 then begin
-            finalize cont root_tasks;
-            exit 0
-          end)
-        ~notification:(fun _ -> ()))
-    root_tasks;
+  end else regenerate_unproved cont strategy;
 
   let update_monitor w s r =
     Format.printf "Progress: %d/%d/%d      \r%!" w s r;
