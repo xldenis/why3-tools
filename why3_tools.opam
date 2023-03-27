@@ -13,7 +13,6 @@ depends: [
   "ocaml"
   "dune" {>= "3.7"}
   "odoc" {with-doc}
-  "cmdliner"
 ]
 build: [
   ["dune" "subst"] {dev}

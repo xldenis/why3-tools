@@ -31,7 +31,6 @@ let run_strategy_on_goal c id strat ~notification ~finalize ~callback =
     else begin
       let cur_id = !id in
       id := !id + 1;
-      callback (Start (cur_id, "prover"));
       match Array.get strat pc with
       | Icall_prover (p, timelimit, memlimit, steplimit) ->
           let main = Whyconf.get_main c.controller_config in
@@ -40,14 +39,20 @@ let run_strategy_on_goal c id strat ~notification ~finalize ~callback =
           let steplimit = Opt.get_def 0 steplimit in
           let callback _panid res =
             match res with
-            | UpgradeProver _ | Scheduled | Running -> (* nothing to do yet *) ()
+            | Running -> callback (Start (cur_id, "prover"))
+            | UpgradeProver _ | Scheduled -> (* nothing to do yet *) ()
             | Done { Call_provers.pr_answer = Call_provers.Valid; _ } ->
                 (* proof succeeded, nothing more to do *)
-                halt mem
-            | Interrupted -> halt mem
-            | Done _ | InternalFailure _ ->
-                (* proof did not succeed, goto to next step *)
                 callback (End cur_id);
+
+                halt mem
+            | Interrupted ->
+                callback (End cur_id);
+
+                halt mem
+            | Done _ | InternalFailure _ ->
+                callback (End cur_id);
+                (* proof did not succeed, goto to next step *)
                 exec_strategy id (pc + 1) mem strat g
             | Undone | Detached | Uninstalled _ | Removed _ ->
                 (* should not happen *)
@@ -59,14 +64,15 @@ let run_strategy_on_goal c id strat ~notification ~finalize ~callback =
           C.schedule_proof_attempt c g p ~limit ~callback ~notification
       | Itransform (trname, pcsuccess) ->
           let callback ntr =
-            callback (End cur_id);
             match ntr with
-            | TSfatal (_, _) -> halt mem
+            | TSfatal (_, _) -> callback (End cur_id); halt mem
             | TSfailed _e ->
+                callback (End cur_id);
                 (* transformation failed *)
                 exec_strategy id (pc + 1) mem strat g
-            | TSscheduled -> ()
+            | TSscheduled -> callback (Start (cur_id, "transform"));
             | TSdone tid ->
+                callback (End cur_id);
                 let sub_tasks = Session_itp.get_sub_tasks c.controller_session tid in
                 let children = ref (List.length sub_tasks) in
                 List.iter (fun g -> exec_strategy id pcsuccess (children :: mem) strat g) sub_tasks
@@ -94,14 +100,11 @@ let finalize cont roots =
 
   (* Session_itp.save_session cont.controller_session; *)
   match unproved with
-  | [] -> begin
-      Session_itp.save_session cont.controller_session;
-      Format.printf "Successfully updated session"
-    end
+  | [] -> begin Format.eprintf "Successfully proved session" end
   | _ ->
       List.iter
         (fun un_id ->
-          Format.printf "Failed to prove %s"
+          Format.eprintf "Failed to prove %s"
             (Session_itp.get_proof_name cont.controller_session un_id).id_string)
         unproved
 
@@ -114,7 +117,7 @@ let init_env_conf opts =
   Whyconf.load_plugins main;
   (config, Env.create_env lp)
 
-let regenerate why3_opts path strategy =
+let strategy_info why3_opts path strategy =
   let config, env = init_env_conf why3_opts in
   let files = Queue.create () in
   Queue.push path files;
@@ -123,6 +126,7 @@ let regenerate why3_opts path strategy =
 
   let cont = Controller_itp.create_controller config env ses in
   Server_utils.load_strategies cont;
+  Controller_itp.set_session_max_tasks (Whyconf.running_provers_max (Whyconf.get_main config));
 
   let found_obs, _ =
     try Controller_itp.reload_files cont
@@ -147,20 +151,28 @@ let regenerate why3_opts path strategy =
       []
   in
 
-  Format.printf "Found %d root tasks, applying %s to each\n" (List.length root_tasks) strategy;
+  Format.eprintf "Found %d root tasks, applying %s to each\n" (List.length root_tasks) strategy;
   Format.print_flush ();
 
   (* A reference which stores how many strategies we are launching *)
   let num_strats = ref (List.length root_tasks) in
 
+  Format.printf "run_id,step_id,step_kind,step_start,step_end\n";
   List.iter
     (fun id ->
-      Format.printf "info for goal %a" Session_itp.print_proofNodeID id;
       let times : (int, string * float * float option) Hashtbl.t = Hashtbl.create 32 in
 
       run_strategy_on_goal cont id strat
         ~finalize:(fun _ ->
           num_strats := !num_strats - 1;
+
+          Hashtbl.iter
+            (fun (step : int) (k, strt, Some e) ->
+              Format.printf "%d, %d, %s, %d, %d\n" (Obj.magic id) step k
+                (int_of_float (strt *. 1000.))
+                (int_of_float (e *. 1000.)))
+            times;
+
           if !num_strats = 0 then begin
             finalize cont root_tasks;
             exit 0
@@ -168,20 +180,14 @@ let regenerate why3_opts path strategy =
         ~notification:(fun _ -> ())
         ~callback:(fun s ->
           match s with
-          | Start (id, k) -> Hashtbl.replace times id (k, Sys.time (), None)
+          | Start (id, k) -> Hashtbl.replace times id (k, Unix.gettimeofday (), None)
           | End id ->
               let k, s, _ = Hashtbl.find times id in
-              Hashtbl.replace times id (k, s, Some (Sys.time ())));
-
-      Hashtbl.iter
-        (fun (id : int) (k, strt, Some e) -> Format.printf "%d %s %f" id k (e -. strt))
-        times;
-
-      Format.print_newline ())
+              Hashtbl.replace times id (k, s, Some (Unix.gettimeofday ()))))
     root_tasks;
 
   let update_monitor w s r =
-    Format.printf "Progress: %d/%d/%d\r%!" w s r;
+    Format.eprintf "Progress: %d/%d/%d\r%!" w s r;
     Format.print_flush ()
   in
   C.register_observer update_monitor;
@@ -199,7 +205,7 @@ let load_path =
   let docv = "LIBRARY_PATH" in
   Arg.(value & opt_all string [] & info [ "L" ] ~docv)
 
-let regenerate_cmd =
+let cmd =
   Cmd.v
-    (Cmd.info ~sdocs:"apply a strategy to a proof session" "regenerate")
-    Term.(const regenerate $ load_path $ path $ strategy)
+    (Cmd.info ~sdocs:"build a timeline of strategy execution\n      " "strategy_info")
+    Term.(const strategy_info $ load_path $ path $ strategy)

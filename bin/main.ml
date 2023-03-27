@@ -40,5 +40,5 @@ let stats_command =
     (Cmd.info ~doc:"export a CSV of prover times for a session" "csv-export")
     Term.(const stats $ path)
 
-let cmd = Cmd.group (Cmd.info "why3-tool") [ stats_command; regenerate_cmd ]
+let cmd = Cmd.group (Cmd.info "why3-tool") [ stats_command; regenerate_cmd; Strategy_info.cmd]
 let () = exit (Cmd.eval cmd)
