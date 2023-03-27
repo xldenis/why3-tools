@@ -104,6 +104,9 @@ let regenerate_unproved cont strategy =
       exit 1
   in
 
+  (* remove detached *)
+  C.clean cont ~removed:(fun _ -> ()) None;
+
   let root_tasks =
     let open Session_itp in
     let session = cont.controller_session in
@@ -121,7 +124,7 @@ let regenerate_unproved cont strategy =
     exit 0
   end;
 
-  Format.printf "Found %d root tasks, applying %s to each\n" (List.length root_tasks) strategy;
+  Format.printf "Found %d unproved root tasks, applying %s to each\n" (List.length root_tasks) strategy;
   Format.print_flush ();
 
   (* A reference which stores how many strategies we are launching *)
