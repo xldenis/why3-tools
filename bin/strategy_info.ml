@@ -4,6 +4,61 @@ open Cmdliner
 module S = Unix_scheduler.Unix_scheduler
 module C = Controller_itp.Make (Unix_scheduler.Unix_scheduler)
 
+open Session_itp
+type transformation_status2 =
+    TSscheduled
+  | TSstart
+  | TSdone of transID
+  | TSfailed of (proofNodeID * exn)
+  (* We distinguish normal usage exception of transformation from fatal
+     exception like assertion failure that should not be raised *)
+  | TSfatal of (proofNodeID * exn)
+
+let schedule_transformation c id name args ~callback ~notification =
+  let open Controller_itp in
+  let callback (s : transformation_status2) =
+    begin match s with
+          | TSstart -> ()
+          | TSdone tid -> update_trans_node notification c.controller_session tid
+          | TSscheduled
+          | TSfailed _ | TSfatal _  -> ()
+    end;
+    callback s
+  in
+  let apply_trans () : bool  =
+    callback TSstart;
+    let status : transformation_status2 =
+      try
+        let subtasks =
+          apply_trans_to_goal ~allow_no_effect:false
+                              c.controller_session c.controller_env name args id
+        in
+        let tid = graft_transf c.controller_session id name args subtasks in
+        TSdone tid
+      with
+      | NoProgress ->
+          (* if result is same as input task, consider it as a failure *)
+          TSfailed (id, NoProgress)
+      | e when not (is_fatal e) ->
+          TSfailed (id, e)
+      | e when not (Debug.test_flag Debug.stack_trace) ->
+          (* "@[Exception raised in Session_itp.apply_trans_to_goal %s:@ %a@.@]"
+          name Exn_printer.exn_printer e; TODO *)
+          TSfatal (id, e)
+    in
+    callback status;
+    false
+  in
+  if Session_itp.is_detached c.controller_session (APn id) then
+    raise Not_found;
+  if Session_itp.check_if_already_exists c.controller_session id name args then
+    raise Not_found;
+  callback TSscheduled;
+  let _ = apply_trans () in ()
+
+
+
+
 let fmt_strat_step fmt s =
   let open Strategy in
   match s with
@@ -65,12 +120,13 @@ let run_strategy_on_goal c id strat ~notification ~finalize ~callback =
       | Itransform (trname, pcsuccess) ->
           let callback ntr =
             match ntr with
+            | TSstart -> callback (Start (cur_id, "transform"));
             | TSfatal (_, _) -> callback (End cur_id); halt mem
             | TSfailed _e ->
                 callback (End cur_id);
                 (* transformation failed *)
                 exec_strategy id (pc + 1) mem strat g
-            | TSscheduled -> callback (Start (cur_id, "transform"));
+            | TSscheduled -> ()
             | TSdone tid ->
                 callback (End cur_id);
                 let sub_tasks = Session_itp.get_sub_tasks c.controller_session tid in
@@ -81,7 +137,7 @@ let run_strategy_on_goal c id strat ~notification ~finalize ~callback =
           begin
             match Session_itp.get_transformation c.controller_session g trname [] with
             | tid -> callback (TSdone tid)
-            | exception Not_found -> C.schedule_transformation c g trname [] ~callback ~notification
+            | exception Not_found -> schedule_transformation c g trname [] ~callback ~notification
           end
       | Igoto pc -> exec_strategy id pc mem strat g
     end
@@ -187,7 +243,7 @@ let strategy_info why3_opts path strategy =
     root_tasks;
 
   let update_monitor w s r =
-    Format.eprintf "Progress: %d/%d/%d\r%!" w s r;
+    Format.eprintf "Progress: %d/%d/%d      \r%!" w s r;
     Format.print_flush ()
   in
   C.register_observer update_monitor;
