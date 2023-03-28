@@ -121,6 +121,7 @@ let regenerate_unproved cont strategy =
 
   if List.length root_tasks = 0 then begin
     Format.printf "No unproved tasks, exiting";
+    finalize cont root_tasks;
     exit 0
   end;
 
