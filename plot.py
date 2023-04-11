@@ -24,7 +24,7 @@ print(f'95%       {df["Time"].quantile(0.95)}')
 # group the data by Key and create a histogram for each group
 groups = df.groupby(df["Prover"])
 
-print(groups.size().sort_values(ascending = False).head(20))
+print(groups.size().sort_values(ascending = False).to_string())
 
 trimmed = groups.filter(lambda x: len(x)>1000)
 print(trimmed.describe().round(2).to_string())

@@ -2,6 +2,7 @@ open Why3
 open Session_itp
 open Cmdliner
 open Regenerate
+open Upgrade
 
 let stats path =
   (* Required to be able to load a session *)
@@ -40,5 +41,5 @@ let stats_command =
     (Cmd.info ~doc:"export a CSV of prover times for a session" "csv-export")
     Term.(const stats $ path)
 
-let cmd = Cmd.group (Cmd.info "why3-tool") [ stats_command; regenerate_cmd ]
+let cmd = Cmd.group (Cmd.info "why3-tool") [ stats_command; regenerate_cmd; upgrade_cmd ]
 let () = exit (Cmd.eval cmd)

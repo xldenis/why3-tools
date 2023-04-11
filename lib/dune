@@ -1,2 +1,3 @@
 (library
- (name why3_tools))
+ (name why3_tools)
+ (libraries why3))

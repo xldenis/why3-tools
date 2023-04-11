@@ -1,76 +1,7 @@
 open Why3
 open Wstdlib
 open Cmdliner
-module S = Unix_scheduler.Unix_scheduler
-module C = Controller_itp.Make (Unix_scheduler.Unix_scheduler)
-
-let fmt_strat_step fmt s =
-  let open Strategy in
-  match s with
-  | Icall_prover (pr, _, _, _) -> Format.fprintf fmt "prover %a" Whyconf.print_prover pr
-  | Itransform _ -> Format.fprintf fmt "transform"
-  | Igoto n -> Format.fprintf fmt "goto %d" n
-
-let run_strategy_on_goal c id strat ~notification ~finalize =
-  let open Strategy in
-  let open Controller_itp in
-  let rec exec_strategy pc (mem : int ref list) (strat : Strategy.instruction array) g =
-    let rec halt mem =
-      match mem with
-      | m :: tl ->
-          m := !m - 1;
-          if !m <= 0 then halt tl
-      | [] -> finalize ()
-    in
-    if pc < 0 || pc >= Array.length strat then halt mem
-    else begin
-      match Array.get strat pc with
-      | Icall_prover (p, timelimit, memlimit, steplimit) ->
-          let main = Whyconf.get_main c.controller_config in
-          let timelimit = Opt.get_def (Whyconf.timelimit main) timelimit in
-          let memlimit = Opt.get_def (Whyconf.memlimit main) memlimit in
-          let steplimit = Opt.get_def 0 steplimit in
-          let callback _panid res =
-            match res with
-            | UpgradeProver _ | Scheduled | Running -> (* nothing to do yet *) ()
-            | Done { Call_provers.pr_answer = Call_provers.Valid; _ } ->
-                (* proof succeeded, nothing more to do *)
-                halt mem
-            | Interrupted -> halt mem
-            | Done _ | InternalFailure _ ->
-                (* proof did not succeed, goto to next step *)
-                exec_strategy (pc + 1) mem strat g
-            | Undone | Detached | Uninstalled _ | Removed _ ->
-                (* should not happen *)
-                assert false
-          in
-          let limit =
-            { Call_provers.limit_time = timelimit; limit_mem = memlimit; limit_steps = steplimit }
-          in
-          C.schedule_proof_attempt c g p ~limit ~callback ~notification
-      | Itransform (trname, pcsuccess) ->
-          let callback ntr =
-            match ntr with
-            | TSfatal (_, _) -> halt mem
-            | TSfailed _e ->
-                (* transformation failed *)
-                exec_strategy (pc + 1) mem strat g
-            | TSscheduled -> ()
-            | TSdone tid ->
-                let sub_tasks = Session_itp.get_sub_tasks c.controller_session tid in
-                let children = ref (List.length sub_tasks) in
-                List.iter (fun g -> exec_strategy pcsuccess (children :: mem) strat g) sub_tasks
-          in
-
-          begin
-            match Session_itp.get_transformation c.controller_session g trname [] with
-            | tid -> callback (TSdone tid)
-            | exception Not_found -> C.schedule_transformation c g trname [] ~callback ~notification
-          end
-      | Igoto pc -> exec_strategy pc mem strat g
-    end
-  in
-  exec_strategy 0 [] strat id
+open Why3_tools.Api
 
 (*
   Clean up and save sessio
@@ -114,7 +45,7 @@ let regenerate_unproved cont strategy =
     fold_all_session session
       (fun acc any ->
         match any with
-        | APn id when (is_root id) && not (pn_proved session id) -> id :: acc
+        | APn id when is_root id && not (pn_proved session id) -> id :: acc
         | _ -> acc)
       []
   in
@@ -125,7 +56,8 @@ let regenerate_unproved cont strategy =
     exit 0
   end;
 
-  Format.printf "Found %d unproved root tasks, applying %s to each\n" (List.length root_tasks) strategy;
+  Format.printf "Found %d unproved root tasks, applying %s to each\n" (List.length root_tasks)
+    strategy;
   Format.print_flush ();
 
   (* A reference which stores how many strategies we are launching *)
@@ -173,11 +105,12 @@ let regenerate why3_opts path strategy =
     Format.printf "Found obsolete goals, replaying..\n";
     Format.print_flush ();
     C.replay ~valid_only:true ~obsolete_only:true cont
-          ~callback:(fun _ _ -> ())
-          ~notification:(fun _ -> ())
-          ~final_callback:(fun _ _ -> regenerate_unproved cont strategy)
-          ~any:None;
-  end else regenerate_unproved cont strategy;
+      ~callback:(fun _ _ -> ())
+      ~notification:(fun _ -> ())
+      ~final_callback:(fun _ _ -> regenerate_unproved cont strategy)
+      ~any:None
+  end
+  else regenerate_unproved cont strategy;
 
   let update_monitor w s r =
     Format.printf "Progress: %d/%d/%d      \r%!" w s r;
