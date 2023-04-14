@@ -2,23 +2,22 @@ open Why3
 open Cmdliner
 open Why3_tools.Api
 
+let pa_name (cont : Controller_itp.controller) pa =
+  let pn = Session_itp.get_proof_attempt_parent cont.controller_session pa in
+  (Session_itp.get_proof_name cont.controller_session pn).id_string
+
 (*
-  Clean up and save sessio
+  Clean up and save session
 *)
 let finalize (cont : Controller_itp.controller) failed =
   (* Session_itp.save_session cont.controller_session; *)
   match failed with
   | [] -> begin
       Session_itp.save_session cont.controller_session;
-      Format.printf "Successfully updated session"
+      Format.printf "Successfully updated session\n"
     end
   | _ ->
-      List.iter
-        (fun un_id ->
-          let pn = Session_itp.get_proof_attempt_parent cont.controller_session un_id in
-          Format.printf "Failed to prove %s\n"
-            (Session_itp.get_proof_name cont.controller_session pn).id_string)
-        failed
+      Format.printf "Failed to update session\n"
 
 open Whyconf
 
@@ -53,10 +52,6 @@ let upgrade_prover (cont : Controller_itp.controller) (upgrade : prover Hprover.
       let pn = get_proof_attempt_parent session pa in
       let node = get_proof_attempt_node session pa in
       let new_prover = Hprover.find upgrade node.prover in
-      Format.printf "Upgrading %a from %a to %a\n" print_proofAttemptID pa print_prover node.prover
-        print_prover new_prover;
-      Format.print_flush ();
-      remove_proof_attempt session pn node.prover;
       C.schedule_proof_attempt cont pn new_prover ~limit:node.limit
         ~callback:(fun id status ->
           match status with
@@ -66,15 +61,16 @@ let upgrade_prover (cont : Controller_itp.controller) (upgrade : prover Hprover.
               let old_status = Option.get node.proof_state in
 
               if old_status.pr_answer <> res_status.pr_answer then begin
-                Format.eprintf "Failed to upgrade %a\n" print_proofAttemptID pa;
+                Format.eprintf "Failed to upgrade %s\n" (pa_name cont pa);
                 Format.print_flush ();
                 failed := id :: !failed
               end;
+              remove_proof_attempt session pn node.prover;
               finalize ()
             end
           | Running -> ()
           | _ -> begin
-              Format.eprintf "Prover failed to run %a\n" print_proofAttemptID pa;
+              Format.eprintf "Prover failed to run on task %s\n" (pa_name cont pa);
               Format.print_flush ();
               remaining := !remaining - 1;
               failed := id :: !failed;

@@ -83,11 +83,17 @@ let init_env_conf opts =
   let lp = List.rev_append opts (loadpath main) in
   let config = set_main config (set_loadpath main lp) in
   Whyconf.load_plugins main;
+  let _ = Getopt.parse_many [Loc.Args.desc_no_warn] [|"--warn-off=unused_variable"; "--warn-off=clone_not_abstract"; "--warn-off=axiom_abstract"|] 0 in
+  Loc.Args.set_flags_selected ();
   (config, Env.create_env lp)
 
 let regenerate why3_opts path strategy =
   let config, env = init_env_conf why3_opts in
   let files = Queue.create () in
+  if not (Sys.file_exists path) then begin
+    Format.printf "Invalid file";
+    exit 1
+  end;
   Queue.push path files;
   let dir = Server_utils.get_session_dir ~allow_mkdir:false files in
   let ses = Session_itp.load_session dir in
