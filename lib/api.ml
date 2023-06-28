@@ -40,18 +40,25 @@ let run_strategy_on_goal c id strat ~notification ~finalize =
     else begin
       match Array.get strat pc with
       | Icall_prover is ->
+          let already_done = ref (List.length is) in
           let callback _panid res =
             match res with
             | UpgradeProver _ | Scheduled | Running -> (* nothing to do yet *) ()
             | Done { Call_provers.pr_answer = Call_provers.Valid; _ } ->
                 (* proof succeeded, nothing more to do *)
                 C.interrupt_proof_attempts_for_goal c g;
+                already_done := 0;
                 halt mem
-            | Interrupted -> halt mem
-            | Done _ | InternalFailure _ ->
-                (* proof did not succeed, goto to next step *)
-                exec_strategy (pc + 1) mem strat g
-            | Undone | Detached | Uninstalled _ | Removed _ ->
+            | Interrupted -> ()
+                (* halt mem *)
+            | Done _ ->
+                already_done := !already_done - 1;
+                if !already_done = 0 then begin
+
+                  (* proof did not succeed, goto to next step *)
+                  exec_strategy (pc + 1) mem strat g
+                end
+            | Undone | Detached | Uninstalled _ | Removed _  | InternalFailure _ ->
                 (* should not happen *)
                 assert false
           in

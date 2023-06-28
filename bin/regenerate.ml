@@ -13,7 +13,7 @@ let finalize cont roots =
     List.filter (fun id -> not (Session_itp.pn_proved cont.controller_session id)) roots
   in
 
-  (* Session_itp.save_session cont.controller_session; *)
+  Session_itp.save_session cont.controller_session;
   match unproved with
   | [] -> begin
       Session_itp.save_session cont.controller_session;
@@ -34,6 +34,7 @@ let regenerate_unproved cont strategy =
       Format.eprintf "Could not find the strategy %s" strategy;
       exit 1
   in
+  C.reset_proofs cont ~removed:(fun _ -> ()) ~notification:(fun _ -> ()) None;
 
   (* remove detached *)
   C.clean cont ~removed:(fun _ -> ()) None;
@@ -62,13 +63,13 @@ let regenerate_unproved cont strategy =
 
   (* A reference which stores how many strategies we are launching *)
   let num_strats = ref (List.length root_tasks) in
-
   List.iter
     (fun id ->
-      C.reset_proofs cont ~removed:(fun _ -> ()) ~notification:(fun _ -> ()) (Some (APn id));
+      (* C.reset_proofs cont ~removed:(fun _ -> ()) ~notification:(fun _ -> ()) (Some (APn id)); *)
       run_strategy_on_goal cont id strat
         ~finalize:(fun _ ->
           num_strats := !num_strats - 1;
+
           if !num_strats = 0 then begin
             finalize cont root_tasks;
             exit 0
@@ -101,22 +102,13 @@ let regenerate why3_opts path strategy =
   let cont = Controller_itp.create_controller config env ses in
   Controller_itp.set_session_max_tasks (Whyconf.running_provers_max (Whyconf.get_main config));
 
-  let found_obs, _ =
+  let _, _ =
     try Controller_itp.reload_files cont
     with Controller_itp.Errors_list l ->
       List.iter (fun e -> Format.printf "%a@." Exn_printer.exn_printer e) l;
       exit 1
   in
-  if found_obs then begin
-    Format.printf "Found obsolete goals, replaying..\n";
-    Format.print_flush ();
-    C.replay ~valid_only:true ~obsolete_only:true cont
-      ~callback:(fun _ _ -> ())
-      ~notification:(fun _ -> ())
-      ~final_callback:(fun _ _ -> regenerate_unproved cont strategy)
-      ~any:None
-  end
-  else regenerate_unproved cont strategy;
+  regenerate_unproved cont strategy;
 
   let update_monitor w s r =
     Format.printf "Progress: %d/%d/%d      \r%!" w s r;
