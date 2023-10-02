@@ -13,7 +13,6 @@ let finalize cont roots =
     List.filter (fun id -> not (Session_itp.pn_proved cont.controller_session id)) roots
   in
 
-  Session_itp.save_session cont.controller_session;
   match unproved with
   | [] -> begin
       Session_itp.save_session cont.controller_session;
