@@ -103,7 +103,7 @@ let regenerate why3_opts path strategy =
   Controller_itp.set_session_max_tasks (Whyconf.running_provers_max (Whyconf.get_main config));
 
   let _, _ =
-    try Controller_itp.reload_files cont
+    try Controller_itp.reload_files ~ignore_shapes:true cont
     with Controller_itp.Errors_list l ->
       List.iter (fun e -> Format.printf "%a@." Exn_printer.exn_printer e) l;
       exit 1

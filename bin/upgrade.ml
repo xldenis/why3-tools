@@ -117,7 +117,7 @@ let validate_upgrade (cont : Controller_itp.controller) upgrade =
 let upgrade why3_opts path upgrade_specs =
   let cont = load_session why3_opts path in
   let found_obs, _ =
-    try Controller_itp.reload_files cont
+    try Controller_itp.reload_files ~ignore_shapes:true cont
     with Controller_itp.Errors_list l ->
       List.iter (fun e -> Format.printf "%a@." Exn_printer.exn_printer e) l;
       exit 1
