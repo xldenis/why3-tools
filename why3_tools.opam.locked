@@ -14,9 +14,9 @@ depends: [
   "base-bigarray" {= "base"}
   "base-threads" {= "base"}
   "base-unix" {= "base"}
-  "dune" {= "3.7.0"}
-  "ocaml" {= "4.14.0"}
-  "ocaml-base-compiler" {= "4.14.0"}
+  "dune" {= "3.14.0"}
+  "ocaml" {= "4.14.1"}
+  "ocaml-base-compiler" {= "4.14.1"}
   "ocaml-config" {= "2"}
   "ocaml-options-vanilla" {= "1"}
 ]
