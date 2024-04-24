@@ -123,3 +123,55 @@ let stabilize_cmd =
   Cmd.v
     (Cmd.info ~sdocs:"bisect unstable goals" "stabilize")
     Term.(const stabilize $ load_path $ path)
+
+
+
+let z3_smt why3_opts path =
+  let config, env = init_env_conf why3_opts in
+  let files = Queue.create () in
+  if not (Sys.file_exists path) then begin
+    Format.printf "Invalid file";
+    exit 1
+  end;
+  Queue.push path files;
+  let dir = Server_utils.get_session_dir ~allow_mkdir:false files in
+  let ses = Session_itp.load_session dir in
+
+  let cont = Controller_itp.create_controller config env ses in
+    Controller_itp.set_session_max_tasks (Whyconf.running_provers_max (Whyconf.get_main config));
+
+    let _, _ =
+      try Controller_itp.reload_files cont ~ignore_shapes:true
+      with Controller_itp.Errors_list l ->
+        List.iter (fun e -> Format.printf "%a@." Exn_printer.exn_printer e) l;
+        exit 1
+    in
+    let open Whyconf in
+
+    Session_itp.session_iter_proof_node_id (fun pnid ->
+      let pans = Session_itp.get_proof_attempts ses pnid in
+      let z3_pa = List.filter (fun (pan : Session_itp.proof_attempt_node) -> pan.prover.prover_name = "Z3") pans |> List.hd in
+      let z3_res = Option.get z3_pa.proof_state in
+      let z3_timeout = z3_res.pr_answer <> Valid in
+      let z3_slower = List.exists (fun (pa : Session_itp.proof_attempt_node) -> Option.value ~default:false (Option.map (fun (res : Call_provers.prover_result) -> z3_res.pr_time > res.pr_time) pa.proof_state) ) pans in
+       (* List.exists *)
+      if z3_timeout || z3_slower then begin
+        try
+          let (_, fpath, _) = C.prepare_edition cont pnid z3_pa.prover ~notification:(fun _ -> ()) in
+          Format.printf "%s\n" fpath;
+        with Not_found -> ()
+      end
+    ) ses
+
+let path =
+  let docv = "FILE" in
+  Arg.(required & pos 0 (some string) None & info [] ~docv)
+
+let load_path =
+  let docv = "LIBRARY_PATH" in
+  Arg.(value & opt_all string [] & info [ "L" ] ~docv)
+
+let z3_cmd =
+  Cmd.v
+    (Cmd.info ~sdocs:"find slower z3 goals" "z3_smt")
+    Term.(const z3_smt $ load_path $ path)
