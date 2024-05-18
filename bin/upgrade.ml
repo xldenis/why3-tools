@@ -14,10 +14,12 @@ let finalize (cont : Controller_itp.controller) failed =
   match failed with
   | [] -> begin
       Session_itp.save_session cont.controller_session;
-      Format.printf "Successfully updated session\n"
+      Format.printf "Successfully updated session\n";
+      exit 0
     end
   | _ ->
-      Format.printf "Failed to update session\n"
+      Format.printf "Failed to update session\n";
+      exit 1
 
 open Whyconf
 
@@ -41,10 +43,8 @@ let upgrade_prover (cont : Controller_itp.controller) (upgrade : prover Hprover.
   Format.printf "Upgrading %d proof attempts\n" !remaining;
   Format.print_flush ();
   let finalize () =
-    if !remaining = 0 then begin
-      finalize cont !failed;
-      exit 0
-    end
+    if !remaining = 0 then
+      finalize cont !failed
   in
 
   List.iter
