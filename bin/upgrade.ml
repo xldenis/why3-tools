@@ -9,7 +9,7 @@ let pa_name (cont : Controller_itp.controller) pa =
 (*
   Clean up and save session
 *)
-let finalize (cont : Controller_itp.controller) failed =
+let finalize allow_partial (cont : Controller_itp.controller) failed =
   (* Session_itp.save_session cont.controller_session; *)
   match failed with
   | [] -> begin
@@ -18,12 +18,13 @@ let finalize (cont : Controller_itp.controller) failed =
       exit 0
     end
   | _ ->
+    if allow_partial then Session_itp.save_session cont.controller_session;
       Format.printf "Failed to update session\n";
       exit 1
 
 open Whyconf
 
-let upgrade_prover (cont : Controller_itp.controller) (upgrade : prover Hprover.t) =
+let upgrade_prover allow_partial (cont : Controller_itp.controller) (upgrade : prover Hprover.t) =
   let open Session_itp in
   let session = cont.controller_session in
   let need_upgrade =
@@ -44,7 +45,7 @@ let upgrade_prover (cont : Controller_itp.controller) (upgrade : prover Hprover.
   Format.print_flush ();
   let finalize () =
     if !remaining = 0 then
-      finalize cont !failed
+      finalize allow_partial cont !failed
   in
 
   List.iter
@@ -115,7 +116,7 @@ let validate_upgrade (cont : Controller_itp.controller) upgrade =
       end)
     upgrade
 
-let upgrade why3_opts path upgrade_specs =
+let upgrade allow_partial why3_opts path upgrade_specs =
   let cont = load_session why3_opts path in
   let found_obs, _ =
     try Controller_itp.reload_files ~ignore_shapes:true cont
@@ -133,10 +134,10 @@ let upgrade why3_opts path upgrade_specs =
     C.replay ~valid_only:true ~obsolete_only:true cont
       ~callback:(fun _ _ -> ())
       ~notification:(fun _ -> ())
-      ~final_callback:(fun _ _ -> upgrade_prover cont upgrades)
+      ~final_callback:(fun _ _ -> upgrade_prover allow_partial cont upgrades)
       ~any:None
   end
-  else upgrade_prover cont upgrades;
+  else upgrade_prover allow_partial cont upgrades;
 
   let update_monitor w s r =
     Format.printf "Progress: %d/%d/%d      \r%!" w s r;
@@ -167,7 +168,11 @@ let load_path =
   let docv = "LIBRARY_PATH" in
   Arg.(value & opt_all string [] & info [ "L" ] ~docv)
 
+let allow_partial =
+  let doc = "Save a partially upgraded session even if there are still failing VCs" in
+  Arg.(value & flag & info ["allow-partial"] ~doc)
+
 let upgrade_cmd =
   Cmd.v
     (Cmd.info ~sdocs:"upgrade a prover in a session" "upgrade")
-    Term.(const upgrade $ load_path $ path $ prover_upgrade)
+    Term.(const upgrade $ allow_partial $ load_path $ path $ prover_upgrade)
