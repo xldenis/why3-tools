@@ -91,6 +91,7 @@ let init_env_conf opts =
 
 let load_session why3_opts dir =
   let config, env = init_env_conf why3_opts in
+  Loc.set_warning_hook (fun ?loc:_ _ -> ());
   let files = Queue.create () in
   Queue.push dir files;
   let dir = Server_utils.get_session_dir ~allow_mkdir:false files in
