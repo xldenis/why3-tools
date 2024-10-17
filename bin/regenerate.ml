@@ -17,12 +17,12 @@ let finalize cont roots =
   match unproved with
   | [] -> begin
       Session_itp.save_session cont.controller_session;
-      Format.printf "Successfully updated session"
+      Format.printf "Successfully updated session\n"
     end
   | _ ->
       List.iter
         (fun un_id ->
-          Format.printf "Failed to prove %s"
+          Format.printf "Failed to prove %s\n"
             (Session_itp.get_proof_name cont.controller_session un_id).id_string)
         unproved
 
@@ -31,7 +31,7 @@ let regenerate_unproved cont strategy =
     Server_utils.load_strategies cont;
     try Hstr.find cont.controller_strategies strategy
     with Not_found ->
-      Format.eprintf "Could not find the strategy %s" strategy;
+      Format.eprintf "Could not find the strategy %s\n" strategy;
       exit 1
   in
   C.reset_proofs cont ~removed:(fun _ -> ()) ~notification:(fun _ -> ()) None;
@@ -52,7 +52,7 @@ let regenerate_unproved cont strategy =
   in
 
   if List.length root_tasks = 0 then begin
-    Format.printf "No unproved tasks, exiting";
+    Format.printf "No unproved tasks, exiting\n";
     finalize cont root_tasks;
     exit 0
   end;
@@ -92,7 +92,7 @@ let regenerate why3_opts path strategy =
   let config, env = init_env_conf why3_opts in
   let files = Queue.create () in
   if not (Sys.file_exists path) then begin
-    Format.printf "Invalid file";
+    Format.printf "Invalid file\n";
     exit 1
   end;
   Queue.push path files;
