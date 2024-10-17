@@ -58,7 +58,7 @@ let apply_remove c goal_id rem ~notification : (_ option, 'r) cont =
       in
       C.schedule_transformation c goal_id "remove" [ rem ] ~callback ~notification)
 
-let apply_prover c pn prover limit ~notification : (Call_provers.prover_result, 'r) cont =
+let apply_prover c pn prover limits ~notification : (Call_provers.prover_result, 'r) cont =
   Cont
     (fun k ->
       let callback _ = function
@@ -73,7 +73,7 @@ let apply_prover c pn prover limit ~notification : (Call_provers.prover_result, 
               Exn_printer.exn_printer exn
         | Done res -> k res
       in
-      C.schedule_proof_attempt c pn prover ~limit ~callback ~notification)
+      C.schedule_proof_attempt c pn prover ~limits ~callback ~notification)
 
 let bisect_step c goal_id prover limit rem ~notification ~removed : (bool, 'r) cont =
   let ses = c.controller_session in
@@ -130,15 +130,15 @@ let bisect_proof_attempt ~notification ~removed ~finalize (c : controller) pa_id
   (* proof attempt should be valid *)
   let goal_id = pa.parent in
   let prover = pa.prover in
-  let limit =
-    { pa.limit with Call_provers.limit_steps = Call_provers.empty_limit.Call_provers.limit_steps }
+  let limits =
+    { pa.limits with Call_provers.limit_steps = Call_provers.empty_limits.Call_provers.limit_steps }
   in
 
-  let l (l : Call_provers.resource_limit) = l.limit_time /. pa.limit.limit_time < 0.5 in
+  let l (l : Call_provers.resource_limits) = l.limit_time /. pa.limits.limit_time < 0.5 in
   Debug.dprintf debug "Bisecting with %a started.@." Whyconf.print_prover prover;
   let t = get_task ses goal_id in
   match Eliminate_definition.bisect_step t with
   | Eliminate_definition.BSdone _ -> assert false
   | Eliminate_definition.BSstep (rem, kont) ->
-      let (Cont c) = decide_step ~notification ~removed c goal_id prover limit rem l kont in
+      let (Cont c) = decide_step ~notification ~removed c goal_id prover limits rem l kont in
       c finalize

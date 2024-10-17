@@ -65,7 +65,7 @@ let stabilize why3_opts path =
             begin
               match node.proof_state with
               | Some { Call_provers.pr_answer = Call_provers.Valid; pr_time; _ } ->
-                  if pr_time >= node.limit.limit_time *. 0.5 || pr_time > 2.5 then pa :: acc
+                  if pr_time >= node.limits.limit_time *. 0.5 || pr_time > 2.5 then pa :: acc
                   else acc
               | _ -> acc
             end
