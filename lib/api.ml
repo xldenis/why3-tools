@@ -19,11 +19,11 @@ let call_one_prover (c : Controller_itp.controller) (p, timelimit, memlimit, ste
   let memlimit = Option.value ~default:(Whyconf.memlimit main) memlimit in
   let steplimit = Option.value ~default:0 steplimit in
 
-  let limit =
+  let limits =
     { Call_provers.limit_time = timelimit; limit_mem = memlimit; limit_steps = steplimit }
   in
 
-  C.schedule_proof_attempt c g p ~limit ~callback ~notification
+  C.schedule_proof_attempt c g p ~limits ~callback ~notification
 
 let run_strategy_on_goal c id strat ~notification ~finalize =
   let open Strategy in
