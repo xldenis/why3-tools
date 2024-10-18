@@ -11,6 +11,7 @@ let pa_name (cont : Controller_itp.controller) pa =
 *)
 let finalize allow_partial (cont : Controller_itp.controller) failed =
   (* Session_itp.save_session cont.controller_session; *)
+  Session_itp.save_session cont.controller_session;
   match failed with
   | [] -> begin
       Session_itp.save_session cont.controller_session;
@@ -53,7 +54,7 @@ let upgrade_prover allow_partial (cont : Controller_itp.controller) (upgrade : p
       let pn = get_proof_attempt_parent session pa in
       let node = get_proof_attempt_node session pa in
       let new_prover = Hprover.find upgrade node.prover in
-      C.schedule_proof_attempt cont pn new_prover ~limits:node.limits
+      C.schedule_proof_attempt cont pn new_prover ~limit:node.limit
         ~callback:(fun id status ->
           match status with
           | Scheduled -> ()

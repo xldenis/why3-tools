@@ -19,11 +19,11 @@ let call_one_prover (c : Controller_itp.controller) (p, timelimit, memlimit, ste
   let memlimit = Option.value ~default:(Whyconf.memlimit main) memlimit in
   let steplimit = Option.value ~default:0 steplimit in
 
-  let limits =
+  let limit =
     { Call_provers.limit_time = timelimit; limit_mem = memlimit; limit_steps = steplimit }
   in
 
-  C.schedule_proof_attempt c g p ~limits ~callback ~notification
+  C.schedule_proof_attempt c g p ~limit ~callback ~notification
 
 let run_strategy_on_goal c id strat ~notification ~finalize =
   let open Strategy in
@@ -76,9 +76,8 @@ let run_strategy_on_goal c id strat ~notification ~finalize =
                 let children = ref (List.length sub_tasks) in
                 List.iter (fun g -> exec_strategy pcsuccess (children :: mem) strat g) sub_tasks
           in
-
           C.schedule_transformation c g trname [] ~callback ~notification
-          
+
       | Igoto pc -> exec_strategy pc mem strat g
     end
   in

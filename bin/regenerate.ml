@@ -89,6 +89,8 @@ let init_env_conf opts =
 
 let regenerate why3_opts path strategy =
   let config, env = init_env_conf why3_opts in
+  let flag = Debug.lookup_flag "coma_no_trivial" in
+  Debug.set_flag flag;
   let files = Queue.create () in
   if not (Sys.file_exists path) then begin
     Format.printf "Invalid file\n";
